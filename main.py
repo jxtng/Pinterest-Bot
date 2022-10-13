@@ -7,7 +7,8 @@ from random import random, shuffle, randint
 import requests
 import re
 import json
-import sys
+import os, sys
+import subprocess as cli
 
 from settings import *
 from quillbot import QuillBot
@@ -15,6 +16,7 @@ from quillbot import QuillBot
 
 class PinBoterest:
     def __init__(self, email, password, username):
+        os.chdir(os.path.dirname(__file__))
         try:
             self.email = email
             self.password = password
@@ -82,13 +84,7 @@ class PinBoterest:
         products = products[:self.no_of_pins] if self.no_of_pins > 0 else products
 
         # Login Handling
-        try:
-            self.p('logging in to pinterest... \n\033[37m\033[47m')
-            self.profile.login(suppress=True)
-            self.p(f'@e;\n@g;Logged In Successfully to Username: @b;{self.username}@g; Email: @b;{self.email}@e;\n')
-        except:
-            self.p('@e;@r;Login Failed... Might be related to your Internet Connection. Exiting...@e;\n')
-            sleep(5), sys.exit()
+        self.handle_login()
 
         # Paraphrasing and pinning
         qb = QuillBot()
@@ -185,6 +181,16 @@ class PinBoterest:
 
         return products
 
+    def handle_login(self):
+        if os.name == 'nt': cli.run('ipconfig /flushdns')
+        try:
+            self.p('logging in to pinterest... \n\033[37m\033[47m')
+            self.profile.login(suppress=True)
+            self.p(f'@e;\n@g;Logged In Successfully to Username: @b;{self.username}@g; Email: @b;{self.email}@e;\n')
+        except:
+            self.p('@e;@r;Login Failed... Might be related to your Internet Connection. Exiting...@e;\n')
+            sleep(5), sys.exit()
+
     def handle_board(self, name):
         try:
             soup = BeautifulSoup(requests.get(f'http://pinterest.com/{self.username}/{name.strip().replace(" ", "-")}').text, 'html.parser')
@@ -196,7 +202,8 @@ class PinBoterest:
                 created_board = self.profile.create_board(name=name.replace('-', ' ').title())
                 self.p(f'@g;Created board: @b;{created_board["resource_response"]["data"]["name"]} @g;successfully\n@e;')
                 return created_board['resource_response']['data']['id']
-            except:
+            except Exception as err:
+
                 self.p(f'@r;Failed to create board @b;{name.title()}\n@e;')
                 return False
 
@@ -212,7 +219,8 @@ class PinBoterest:
             link=product_info['link'])
             self.p(f'@g;Pin with Title: @b;{product_info["title"]} @g;in Board: @b;{product_info["board"]} \n@g;and Image: @b;{product_info["image"][:30]}... @g;Created Successfully\n@e;')
             self.successful_pins += 1
-        except:
+        except Exception as err:
+            print(err, board_id)
             try: self.p(f'@r;Failed to create Pin with Title: @b;{product_info["title"]} @r;to Board: @b;{product_info["board"]} \n@r;Image: @b;{product_info["image"][:30]}...\n@e;')
             except: self.p(f'@r;Failed to create Pin. Couldn\'t get right product info: @bProduct - {product_info}\n@e;')
             self.failed_pins += 1
@@ -260,7 +268,7 @@ class PinBoterest:
 
         print(value, sep=sep, end=end, flush=flush)
 
-if not __name__ == '__main__':
+if __name__ == '__main__':
     pinterest = PinBoterest(email, password, username)
     try: pinterest.init()
     except: pinterest.p(f'@y;{"_^-^_-_"*3} Quiting {"_-_^-^_"*3}@e;', effect=True)

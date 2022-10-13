@@ -1,12 +1,13 @@
+# ------------------- STILL IN DEVELOPMENT --------------------------
 # Required
 email = 'zm6ewsy@smartnator.com'
 password = 'Pass@123'
 username = 'zm6ewsy'
 
 # Others
-no_of_product_to_pin = 10
+no_of_product_to_pin = 5
 pinning_frequency = {
-  'morning': [60, 180], # Any time from 60sec(1 min) to 180s(3mins)
+  'morning': [5, 20], # Any time from 60sec(1 min) to 180s(3mins)
   'afternoon': [180, 420],
   'evening': [500, 600],
   'night': [1000, 1200]
@@ -38,5 +39,6 @@ collections_link_selector = 'a[href*=collection]'
 products_link_selector = 'a.grid-product__link'
 product_image_link_container_selector = '.product__thumb-item'
 product_title_selector= '.product-single__title'
+product_title_selector= '.ProductMeta__Title'
 product_description_selector = '[id*=content-description]'
 board_name_position_in_url = -3

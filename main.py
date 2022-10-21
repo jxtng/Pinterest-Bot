@@ -1,49 +1,35 @@
-from py3pin.Pinterest import Pinterest
-from bs4 import BeautifulSoup
-from concurrent.futures import ThreadPoolExecutor
-from time import sleep, localtime
-from functools import reduce
-from random import random, shuffle, randint
-import requests
+from py3pin.Pinterest import Pinterest, BOARDS_RESOURCE, CREATE_BOARD_RESOURCE
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options as WebDriverOptions
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.by import By
+
+from time import localtime, sleep, perf_counter
+from random import randint, random, shuffle
+from math import trunc
 import re
-import json
-import os, sys
+import sys
 import subprocess as cli
+import os
 
 from settings import *
+from store import ShopifyStore
 from quillbot import QuillBot
 
-
-class PinBoterest:
-    def __init__(self, email, password, username):
+class Bot(Pinterest):
+    def __init__(self):
+        super().__init__(email=email, password=password, username=username)
         os.chdir(os.path.dirname(__file__))
         try:
-            self.email = email
-            self.password = password
-            self.username  = username
+            self.website = website
 
-            self.profile = Pinterest(email=self.email, password=self.password, username=self.username)
-
-            self.domain = domain or 'http://wowu.shop'
-            self.collection_link = all_collections_link or 'https://wowu.shop/collections/'
-            self.domain_for_naming = self.domain.split('/')[-1]
-
-            self.default_product_info= product_info
-            self.default_product_link = product_link
-
-            self.collections_selector = collections_link_selector or 'a[href*=collection]'
-            self.products_selector = products_link_selector or 'a.grid-product__link'
-            self.image_link_container_selector = product_image_link_container_selector or 'product__thumb-item'
-            self.title_selector = product_title_selector or 'product-single__title'
-            self.description_selector = product_description_selector or '[id*=content-description]'
-            self.board_url_pos = board_name_position_in_url or -3
-
-            self.no_of_pins = no_of_product_to_pin
+            self.existing_boards = []
+            self.no_of_pins = no_of_pin_per_day
             self.successful_pins = 0
             self.failed_pins = 0
-
-            self.product_infos_file = f'data/product_infos_{self.domain_for_naming}'
-            self.pinned_products_file = f'data/pinned_products_{self.domain_for_naming}'
+            self.failed_delta = 0
 
             self.morning_start = daytime_range['morning'][0]
             self.morning_end = daytime_range['morning'][1]
@@ -52,34 +38,32 @@ class PinBoterest:
             self.evening_start = daytime_range['evening'][0]
             self.evening_end = daytime_range['evening'][1]
             self.frequency = pinning_frequency
+            self.redirect_to_waiter = False
 
-            # self.color_codes = {'e':'\033[0m', 'r':'\033[38;5;196m', 'b':'\033[38;5;27m', 'g':'\033[38;5;82m', 'y':'\033[38;5;221m', 'o':'\033[38;5;208m'}
+            self.pinned_history_file = 'data/pinned_history__'+self.email
+
             self.color_codes = {'e':'\033[0m', 'r':'\033[91m', 'b':'\033[94m', 'g':'\033[92m', 'y':'\033[93m', 'o':'\033[93m'}
-        except:
-            self.p('@o;Settings Error. Check your settings and try again...')
+        except NameError as err:
+            self.p(f'@o;Settings Error - {err}. Check your settings.py and try again.')
+            sys.exit('Exiting...')
 
-    def init(self):
-        # Cool Effect
-        self.p(f'@g;{"_-$-"*7} Initializing PinBoterest {"-$-_"*7}@e;\n\n', effect=True)
+    def start(self):
+        self.p(f'@g;{"_-$-"*7} Initializing Bot {"-$-_"*7}@e;\n\n', effect=True)
 
         # Get Product Infomations
-        try:
-            products = self.handle_products()
-            self.p(f'@b;{len(products)} Products @g;and Infomations @b;Grabbed@g; Successfully.\n@e;')
-        except:
-            self.p('@r;Error Getting Product infos online. Might be your internet connection. Exiting...\n@e;')
-            sleep(5), sys.exit()
+        store = ShopifyStore(self.website, title_selector, description_selector, image_area_selector, min_image_res)
+        products = store.products()
 
         # Filter out already pinned pinterest products
         try:
             print('Filtering pinned products from unpinned ones...')
-            with open(self.pinned_products_file, 'r') as file:
+            with open(self.pinned_history_file, 'r') as file:
                 pinned_products = file.read().split('\n')
-            products = [p for p in products if f'Title: {p["title"]}, Image: {p["image"]}' not in pinned_products]
+            products = [p for p in products if f'Title: {p["title"]}, Image: {p["image"]}, Category: {p["category"]}' not in pinned_products]
         except: pass
         finally: self.p(f'Filtering Done. @b;{len(products)} Products@e; left.\n')
 
-        # Apply settings
+        # Apply product settings
         shuffle(products)
         products = products[:self.no_of_pins] if self.no_of_pins > 0 else products
 
@@ -88,150 +72,165 @@ class PinBoterest:
 
         # Paraphrasing and pinning
         qb = QuillBot()
-        print('Setting up QuillBot Paraphraser')
+        print('\nSetting up QuillBot Paraphraser...')
         self.p(qb.init())
 
         self.p(f'@g;Creating @b;{self.no_of_pins} @g;pins...\n@e;')
+        start_time = perf_counter()
+        try: 
+            for product in products:
+                if perf_counter()-start_time > 86400:
+                    # Take a break
+                    print('24hr has passed, taking a break. Redirecting to Waiter...')
+                    self.redirect_to_waiter = True
+                    break
 
-        try:
-            for i, product in enumerate(products):
-                shuffled_desc = qb.handle_phrasing(product['description'], manual_description_shuffle)
+                shuffled_desc = qb.paraphrase(product['description'], manual_description_shuffle)
                 product['description'] = shuffled_desc['description']
-                self.p(shuffled_desc['msg'])
+                self.p(shuffled_desc['msg']+'\n')
 
-                if self.handle_pin(product) and i < len(products)-1:
+                if self.failed_delta == 3: self.flush_dns()
+                if self.failed_delta == 4: self.handle_login()
+
+                if self.handle_pin(product) and self.successful_pins+self.failed_pins < len(products):
                     time_to_sleep = self.get_pinning_frequency()
                     self.p(f'Waiting/Sleeping for @b;{round(time_to_sleep/60, 3)} min(s) ==> {time_to_sleep} sec(s)@e;... Countdown: @b;@update; seconds@e;', countdown=time_to_sleep)
                     print('\n')
                 else: sleep(3)
-        except:
-            self.p(f'\n@g;{"_-"*10} PinBoterest Suspended {"-_"*10}\n@e;', effect=True)
 
-        # Done and dusted
+        except Exception as err: 
+            self.p(f'\n@y;{"_-"*10} Bot Suspended {"-_"*10}\n@e;', effect=True)
+            print(err)
+
         self.tried_pins = self.successful_pins + self.failed_pins
         self.p(f'@b;{self.tried_pins}@e; out of @b;{self.no_of_pins} {"@o;" if self.no_of_pins/2 > self.tried_pins else "@y;" if self.no_of_pins > self.tried_pins else "@g;"}requested pins gone through@e;')
         self.p(f'@b;{self.successful_pins} Pin(s) @g;Successfully done. @b;{self.failed_pins} Pin(s){"@r;" if self.failed_pins >= (self.tried_pins)/2 else "@o;" if self.failed_pins > (self.tried_pins)/2.75 else "@g;"} Unsuccessful@e;')
-        try: self.p('Cleaning up stuff and Exiting...\n'), qb.done()
-        except: pass
+        
+        runtime = int(perf_counter() - start_time)
+        remaining_time = 86400 - runtime
+        
+        if remaining_time > 0 or self.redirect_to_waiter:
+            try: 
+                self.p(f'\nCleaning up stuff and Waiting for day to pass. \nRemaining time: @b;{trunc(remaining_time/3600)}hrs: {round(remaining_time/60%60)}mins@e;. Use ^C(Ctrl+C) to stop timer and resume pinning.')
+                qb.done()
+                self.p(f'Countdown in secs: @b;@update;@e;', countdown=remaining_time)
+                self.__init__()
+                self.start()
+            except KeyboardInterrupt as err: 
+                print('\nResuming Bot...')
+                self.__init__()
+                self.start()
+            except: print('Key not pressed. Exiting...')
 
-    def get_categories_from_site(self):
-        soup = BeautifulSoup(requests.get(self.collection_link).text, 'html.parser')
-        return [a['href'] for a in soup.select(self.collections_selector)]
-
-    def get_products_from_category(self, cat_link):
-        soup = BeautifulSoup(requests.get(self.domain + cat_link).text, 'html.parser')
-        return [self.domain + a['href'] for a in soup.select(self.products_selector)]
-
-    def get_infos_from_product(self, pro_link):
-        soup = BeautifulSoup(requests.get(pro_link).text, 'html.parser')
-        board = pro_link.split('/')[self.board_url_pos]
-        images = ['https:' + img.a['href'] for img in soup.select(self.image_link_container_selector)]
-        title = soup.select_one(self.title_selector).string.strip()
-        description = reduce(lambda a,b: a+' '+b if len(a)<500 else a+'', soup.select_one(self.description_selector).stripped_strings)+'.'
-
-        return [{'board': board, 'image': image, 'title': title, 'description': description, 'link': pro_link} for image in images]
-
-    def produce_products(self):
-        print('Grabbing Products and Infomations (will take some seconds)...')
-        products = []
-        try: cats = self.get_categories_from_site()
-        except: raise Exception('@r;Failed to Categories from Site@e;')
-
-        self.p(f'@b;{len(cats)} Categor(ies) @e;found. Grabbing products from categories...')
-        try:
-            with ThreadPoolExecutor(max_workers=50) as ex:
-                products = ex.map(self.get_products_from_category, cats)
-                products = [p for pros in products for p in pros]
-        except:
-            self.p('@y;Using loops to grab Products from Categories@e;')
-            try: products = [product_link for cat in cats for product_link in self.get_products_from_category(cat)]
-            except: raise Exception('@r;Failed to grab Products from Categories@e;')
-
-        self.p(f'@b;{len(products)} Products(s) @e;grabbed from Categories. Expanding products and images...')
-        try:
-            with ThreadPoolExecutor(max_workers=50) as ex:
-                products = ex.map(self.get_infos_from_product, products)
-                products = [p for pros in products for p in pros]
-        except:
-            self.p('@y;Using loops to grab infomations from Products@e;')
-            try: products = [info for product in products for info in self.get_infos_from_product(product)]
-            except: raise Exception('@r;Failed to grab Products from Categories@e;')
-
-        self.p(f'Products expanded to @b;{len(products)} Pinaable items@e;')
-        return products
-
-    def handle_products(self, count=3):
-        with open(self.product_infos_file, 'a+') as file:
-            try:
-                file.seek(0)
-                products = json.load(file)
-                if not products: raise Exception('Empty Products found')
-                print('Found stored products history. Grabbing Products and Infomation from file...')
-            except:
-                try: products = self.produce_products()
-                except Exception as err:
-                    self.p(err)
-                    if count: print('Retrying...'), self.handle_products(count-1)
-                    else: sys.exit('Retried 3 times. Exiting...')
-
-                try:
-                    file.seek(0), file.truncate()
-                    json.dump(products, file)
-                except: self.p('@y;Couldn\'t write products to history file. Continuing...')
-
-        return products
+    def flush_dns(self):
+        if os.name == 'nt': dns_flush = cli.run('ipconfig /flushdns', capture_output=True)
+        print('Flushed DNS Successfully') if dns_flush.stdout else print('Unable to flush DNS')
 
     def handle_login(self):
-        if os.name == 'nt': cli.run('ipconfig /flushdns')
-        try:
-            self.p('logging in to pinterest... \n\033[37m\033[47m')
-            self.profile.login(suppress=True)
-            self.p(f'@e;\n@g;Logged In Successfully to Username: @b;{self.username}@g; Email: @b;{self.email}@e;\n')
-        except:
-            self.p('@e;@r;Login Failed... Might be related to your Internet Connection. Exiting...@e;\n')
-            sleep(5), sys.exit()
+        self.p('Logging in to Pinterest...\033[47m')
+        chrome_options = WebDriverOptions()
+        chrome_options.add_argument("--lang=en")
+        chrome_options.add_argument("--headless")
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
 
-    def handle_board(self, name):
         try:
-            soup = BeautifulSoup(requests.get(f'http://pinterest.com/{self.username}/{name.strip().replace(" ", "-")}').text, 'html.parser')
-            dict_data = json.loads(soup.body.find(id='__PWS_DATA__').string)
-            return list(dict_data.get('props').get('initialReduxState').get('feeds').keys())[0].split(':')[-1]
-        except:
+            driver = webdriver.Chrome(ChromeDriverManager().install(), options=chrome_options)
+            driver.get("https://pinterest.com/login")
+
             try:
-                self.p(f'\nCreating board: @b;{name}...@e;')
-                created_board = self.profile.create_board(name=name.replace('-', ' ').title())
-                self.p(f'@g;Created board: @b;{created_board["resource_response"]["data"]["name"]} @g;successfully\n@e;')
-                return created_board['resource_response']['data']['id']
+                WebDriverWait(driver, timeout=15).until( EC.element_to_be_clickable((By.ID, "email")) )
+                driver.find_element(by=By.ID, value="email").send_keys(self.email)
+                driver.find_element(by=By.ID, value="password").send_keys(self.password)
+
+                logins = driver.find_elements(by=By.XPATH, value="//*[contains(text(), 'Log in')]")
+                for login in logins:
+                    login.click()
+
+                WebDriverWait(driver, timeout=15).until( EC.invisibility_of_element((By.ID, "email")) )
+
+                cookies = driver.get_cookies()
+                self.http.cookies.clear()
+                for cookie in cookies:
+                    self.http.cookies.set(cookie["name"], cookie["value"])
+
+                self.registry.update_all(self.http.cookies.get_dict())
             except Exception as err:
+                driver.close()
+                return self.p(f'\033[0m@r;Failed to login - {err}. Continuing@e;')
+        except ConnectionError:
+            return self.p(f'\033[0m@r;Failed to login - {err}. Check your internet connection@e;')
+        
+        self.p(f"\033[0m@g;Successfully logged in to account {self.email}@e;")
+        driver.close()
 
-                self.p(f'@r;Failed to create board @b;{name.title()}\n@e;')
-                return False
+    def handle_board(self, board, runtime=1):
+        if not board: return ''
+        if not self.existing_boards or not runtime:
+            options = {
+                "privacy_filter": "all",
+                "sort": "custom",
+                "username": self.username,
+                "isPrefetch": False,
+                "include_archived": True,
+                "field_set_key": "profile_grid_item",
+                "group_by": "visibility",
+                "redux_normalize_feed": True,
+            }
+            try:
+                url = self.req_builder.buildGet(url=BOARDS_RESOURCE, options=options, source_url=f"/{self.username}/boards/")
+                boards_info = self.get(url=url).json()
+                self.existing_boards = {board.get('name').lower():board.get('id') for board in boards_info["resource_response"]["data"]}
+            except Exception as err: self.p(f'@o;Couldn\'t get exisiting boards - {err}@e;')
+        
+        board = board.replace('-', ' ').lower()
+        if board in self.existing_boards: return self.existing_boards.get(board)
+        else:
+            self.p(f'Creating Board: @b;{board.title()}@e;')
+            options = {
+            "name": board.title(),
+            "description": '',
+            "category": 'other',
+            "privacy": 'public',
+            "layout": 'default',
+            "collab_board_email": "true",
+            "collaborator_invites_enabled": "true",
+            }
+            data = self.req_builder.buildPost(options=options, source_url=f"/{self.email}/boards/")
+            try:
+                created_board = self.post(url=CREATE_BOARD_RESOURCE, data=data)
+                self.p(f'@g;Created board @b;{board.title()}@g; Successfully@e;\n')
+                return created_board.json()['resource_response']['data']['id']
+            except Exception as err: 
+                if runtime: return self.handle_board(board, runtime-1)
+                self.p(f'@r;Error creating board @b;{board.title()}@r; - {err} @e;\n')
+    
+    def handle_pin(self, info):
+        board_id = self.handle_board(info.get('category'))
 
-    def handle_pin(self, product_info):
-        try:
-            board_id = self.handle_board(product_info['board'])
-            self.p(f'Creating pin with Title: @b;{product_info["title"]} @e;to Board: @b;{product_info["board"]}@e;')
-            created_pin = self.profile.pin(
-            board_id=board_id,
-            image_url=product_info['image'],
-            title=product_info['title'],
-            description=product_info['description'],
-            link=product_info['link'])
-            self.p(f'@g;Pin with Title: @b;{product_info["title"]} @g;in Board: @b;{product_info["board"]} \n@g;and Image: @b;{product_info["image"][:30]}... @g;Created Successfully\n@e;')
+        if not info.get('title'): return self.p('@y;Couldn\'t find Product TITLE. skipping...@e;')
+        if not info.get('description'): return self.p('@y;Couldn\'t find Product DESCRIPTION. skipping...@e;')
+        if not info.get('image'): return self.p('@y;Couldn\'t find Product IMAGE. skipping...@e;')
+        if not info.get('link'): return self.p('@y;Couldn\'t find Product LINK. skipping...@e;')
+
+        try: 
+            print(f"Creating Pin Title: {info['title']}, Image: @b;{info['image'][:10]}... to Board: {info.get('category').replace('-', ' ').title() if info.get('category') else 'None'}")
+            created_pin = self.pin(board_id, image_url=info['image'], description=info['description'], link=info['link'], title=info['title'])            
+            board_name = created_pin.json()['resource_response']['data']['board']['name']
+
+            self.p(f"@g;Created pin Title: @b;{info['title']}@g;, Image: @b;{info['image'][:15]}...@g; to Board: @b;{board_name}@e;\n")
             self.successful_pins += 1
-        except Exception as err:
-            print(err, board_id)
-            try: self.p(f'@r;Failed to create Pin with Title: @b;{product_info["title"]} @r;to Board: @b;{product_info["board"]} \n@r;Image: @b;{product_info["image"][:30]}...\n@e;')
-            except: self.p(f'@r;Failed to create Pin. Couldn\'t get right product info: @bProduct - {product_info}\n@e;')
+            self.failed_delta = 0
+            return True
+        except Exception as err: 
+            self.p(f"@r;Failed to pin product Title: {info.get('title')} to Board: {info.get('category')} - {err}@e;\n") 
             self.failed_pins += 1
-            return False
-
-        try:
-            with open(self.pinned_products_file, 'a') as file:
-                file.write(f'\nTitle: {product_info["title"]}, Image: {product_info["image"]}')
-        except: self.p('@y;Problem writing pinned image to history file@e;')
-        return created_pin
-
+            self.failed_delta += 1
+            print(err)
+    
+        # Store to file
+        with open(self.pinned_history_file, 'a') as file:
+            file.write(f'\nTitle: {info["title"]}, Image: {info["image"]}, Category: {info["category"]}')
+    
     def get_pinning_frequency(self):
         curr_hr = localtime().tm_hour
 
@@ -268,7 +267,10 @@ class PinBoterest:
 
         print(value, sep=sep, end=end, flush=flush)
 
+
 if __name__ == '__main__':
-    pinterest = PinBoterest(email, password, username)
-    try: pinterest.init()
-    except: pinterest.p(f'@y;{"_^-^_-_"*3} Quiting {"_-_^-^_"*3}@e;', effect=True)
+    try:
+        bot = Bot()
+        bot.start()
+    except:
+        bot.p(f'\n\n@y;{"-^-"*3} Terminating {"-^-"*3}', effect=True)

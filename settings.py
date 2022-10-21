@@ -1,11 +1,11 @@
-# ------------------- STILL IN DEVELOPMENT --------------------------
+# ------------------- STILL IN DEV --------------------------
 # Required
-email = 'zm6ewsy@smartnator.com'
+email = 'wanpenmak.dee.1.23.4.5@gmail.com'
 password = 'Pass@123'
-username = 'zm6ewsy'
+username = 'wanpenmakdee'
 
 # Others
-no_of_product_to_pin = 5
+no_of_pin_per_day = 5
 pinning_frequency = {
   'morning': [5, 20], # Any time from 60sec(1 min) to 180s(3mins)
   'afternoon': [180, 420],
@@ -18,27 +18,14 @@ daytime_range = {
   'evening': [17, 22],
   'night': [23, 4], #Defaults to this: 23(i.e 11)pm to 4am
 }
+
 manual_description_shuffle = False
 quillbot_description_shuffle = False
 
-# Defaults
-product_info = {'board': 'tiktok', 
-'image': 'https://cdn.shopify.com/s/files/1/0549/8571/9854/products/H56dc2ee25c7b443cad5e45ff255def75s_1800x1800.jpg?v=1658888028', 
-'title': 'Drainage Soap Holder', 
-'description': "BUY 1 GET 1 FREE! Yes, you heard it right! order one and the second one is on us! You're soap will last longer You'll save more on soap purchases You'll stay more organized in you bathroom and kitche sinks Our Drainage Soap Holder is designed for a perfect drainage and avoids mushy bathroom soap which which is unattractive and encourages waste. FEATURES Material: ABS 45° inclined surface design Easy to setup stable suction cup base Multi-purpose usage, can be used in kitchen sink, and bathroom.", 
-'link': 'https://wowu.shop/collections/tiktok/products/drainage-soap-holder'}
-product_link = 'https://wowu.shop/collections/tiktok/products/drainage-soap-holder'
-
-################# ADVANCE ############################
-# Links
-domain = 'http://wowu.shop'
-all_collections_link = 'https://wowu.shop/collections/'
-
-# Selectors
-collections_link_selector = 'a[href*=collection]'
-products_link_selector = 'a.grid-product__link'
-product_image_link_container_selector = '.product__thumb-item'
-product_title_selector= '.product-single__title'
-product_title_selector= '.ProductMeta__Title'
-product_description_selector = '[id*=content-description]'
-board_name_position_in_url = -3
+################# WEBSITE SETTINGS ############################
+website = 'http://wowu.shop'
+min_image_res = 600
+image_area_selector = ''
+# edit below if it fails to grab products from website
+title_selector = ''
+description_selector = ''

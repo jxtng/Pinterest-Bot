@@ -1,0 +1,18 @@
+## ChangeLog
+* Isolated shopify store from pinterest bot
+
+* Improved Pinterest API Implementation 
+* Improved Shopify store products capturing
+* Improved settings.py file
+
+
+## ChangeLog
+
+* Added QuillBot Paraphraser
+* Added Automatic creation of board support
+* Added Color logging and printing effects
+* Added Pin filter support to sepreate pinned products from unpinned
+* Added Pinning frequency and time control based on real time
+* Added Multiple shopify website support (beta)
+
+* Improved settings.py file

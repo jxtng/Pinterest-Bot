@@ -6,6 +6,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from random import randint, shuffle
+from time import sleep
 
 
 class QuillBot:
@@ -34,6 +35,7 @@ class QuillBot:
 
         input.clear(), input.send_keys(string), input.send_keys(Keys.CONTROL + Keys.ENTER)
         WebDriverWait(self.driver, timeout=30).until(EC.element_to_be_clickable((By.CLASS_NAME, 'quillArticleBtn')))
+        sleep(3)
         return {'description': output.text, 'msg': '@g;Description shuffled using QUILLBOT@e;'}
     
     def manual_phrasing(self, string, shuf=False):
@@ -41,18 +43,18 @@ class QuillBot:
         if shuf: shuffle(string)
         return {'description': '. '.join(string[:randint(2 if len(string) > 1 else len(string),len(string))]), 'msg': '@y;Description shuffled MANUAL@e;'}
 
-    def handle_phrasing(self, string,  shuf=False, refresh_count=3):
+    def paraphrase(self, string,  shuf=False, refresh_count=3):
         if self.driver:
             try: return self.quillbot_phrasing(string)
             except:
                 self.driver.refresh()
-                if refresh_count: return self.handle_phrasing(string, refresh_count-1, shuf) 
+                if refresh_count: return self.paraphrase(string, refresh_count-1, shuf) 
         
         elif not self.driver and refresh_count:
             try:
                 print('Retrying QuillBot description paraphraser...')
                 self.init()
-                return self.handle_phrasing(string, 0, shuf)
+                return self.paraphrase(string, 0, shuf)
             except: pass
 
         return self.manual_phrasing(string, shuf)

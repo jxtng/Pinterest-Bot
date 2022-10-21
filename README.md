@@ -1,26 +1,18 @@
-# Pinterest Bot
+# Shopify-Pinterest Python Bot
 
-A python Bot that grabs and pins products from an online store to Pinterest
+A Python Bot that grabs and pins products from A Shopify Store to A Pinterest Account
 
 ## How to Use 
 
-install required by running pip install py3pin in the command line
-open settings.py in notepad and edit/change the required settings ie(email, password and username)
+install the dependencies in the requirements.txt file by running ```pip install -r requirements.txt``` on the command line
+
+open settings.py in notepad or any text editor and edit/change the required settings i.e (email, password and username)
 
 > Your username can be found in profile url pinterest.com/_username_
 
+Edit other neccesary settings:
+* Number of product to pin per day
+* Pinning frequency(time in seconds before pinning the next product respective to part of the day ie in the afternoon(from 12pm to 16/4pm) pin the next product with a random gap of 180-420secs ).
+* Daytime range is the hours when part of days start ie morning starts at 5am to 11am..
 
-edit other neccesary settings such as number of product to pin at a time, pinning frequency(how often to pin products ie morning==pin the next product time from 60secs to 180secs ) and daytime range(the hours when part of days start ie morning starts at 5am to 11am..)
-
-after editing settings.py, save changes and run main.py to start 
-
-## ChangeLog
-
-* Added QuillBot Paraphraser
-* Added Automatic creation of board support
-* Added Color logging and printing effects
-* Added Pin filter support to sepreate pinned products from unpinned
-* Added Pinning frequency and time control based on real time
-* Added Multiple website support (beta)
-
-* Improved settings.py file
+After editing settings.py, save changes and run main.py to start the bot
